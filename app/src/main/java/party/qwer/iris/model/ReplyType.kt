@@ -13,4 +13,10 @@ enum class ReplyType {
 
     @SerialName("image_multiple")
     IMAGE_MULTIPLE,
+
+    @SerialName("video")
+    VIDEO,
+
+    @SerialName("video_multiple")
+    VIDEO_MULTIPLE,
 }
