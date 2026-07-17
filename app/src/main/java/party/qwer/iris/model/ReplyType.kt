@@ -19,4 +19,10 @@ enum class ReplyType {
 
     @SerialName("video_multiple")
     VIDEO_MULTIPLE,
+
+    @SerialName("file")
+    FILE,
+
+    @SerialName("file_multiple")
+    FILE_MULTIPLE,
 }

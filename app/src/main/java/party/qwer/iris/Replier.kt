@@ -133,6 +133,28 @@ class Replier {
             }
         }
 
+        fun sendFile(room: Long, base64FileDataString: String, fileName: String?) {
+            coroutineScope.launch {
+                messageChannel.send(SendMessageRequest {
+                    sendMultipleFilesInternal(
+                        room, listOf(base64FileDataString), fileName?.let { listOf(it) }
+                    )
+                })
+            }
+        }
+
+        fun sendMultipleFiles(
+            room: Long,
+            base64FileDataStrings: List<String>,
+            fileNames: List<String>?
+        ) {
+            coroutineScope.launch {
+                messageChannel.send(SendMessageRequest {
+                    sendMultipleFilesInternal(room, base64FileDataStrings, fileNames)
+                })
+            }
+        }
+
         private fun sendPhotoInternal(room: Long, base64ImageDataString: String) {
             sendMultiplePhotosInternal(room, listOf(base64ImageDataString))
         }
@@ -259,6 +281,159 @@ class Replier {
                 AndroidHiddenApi.startActivity(intent)
             } catch (e: Exception) {
                 System.err.println("Error starting activity for sending videos: $e")
+                throw e
+            }
+        }
+
+
+        /**
+         * 확장자 → MIME 표.
+         *
+         * android.webkit.MimeTypeMap 을 쓰지 않는 이유: Iris 는 앱이 아니라 루트 데몬
+         * 프로세스로 뜨기 때문에 webkit 초기화가 보장되지 않는다. 카톡으로 오갈 만한
+         * 것만 직접 표로 둔다. 표에 없으면 application/octet-stream.
+         */
+        private val EXTENSION_MIME: Map<String, String> = mapOf(
+            "pdf" to "application/pdf",
+            "zip" to "application/zip",
+            "7z" to "application/x-7z-compressed",
+            "tar" to "application/x-tar",
+            "gz" to "application/gzip",
+            "txt" to "text/plain",
+            "log" to "text/plain",
+            "md" to "text/markdown",
+            "csv" to "text/csv",
+            "json" to "application/json",
+            "xml" to "text/xml",
+            "html" to "text/html",
+            "py" to "text/x-python",
+            "doc" to "application/msword",
+            "docx" to "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "xls" to "application/vnd.ms-excel",
+            "xlsx" to "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "ppt" to "application/vnd.ms-powerpoint",
+            "pptx" to "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "hwp" to "application/x-hwp",
+            "hwpx" to "application/haansofthwpx",
+            "apk" to "application/vnd.android.package-archive",
+            "epub" to "application/epub+zip",
+            "mp3" to "audio/mpeg",
+            "wav" to "audio/wav",
+            "m4a" to "audio/mp4",
+        )
+
+        private fun mimeForFile(fileName: String): String {
+            val ext = fileName.substringAfterLast('.', "").lowercase()
+            return EXTENSION_MIME[ext] ?: "application/octet-stream"
+        }
+
+        /** 이름이 없을 때만 쓰는 최소한의 매직 바이트 추정. 모르면 bin. */
+        private fun detectFileExtension(data: ByteArray): String {
+            if (data.size >= 4 &&
+                data[0] == '%'.code.toByte() && data[1] == 'P'.code.toByte() &&
+                data[2] == 'D'.code.toByte() && data[3] == 'F'.code.toByte()
+            ) {
+                return "pdf"
+            }
+            // PK.. — zip 계열(docx/xlsx/apk 도 여기 걸리지만 구분 불가하므로 zip)
+            if (data.size >= 2 &&
+                data[0] == 'P'.code.toByte() && data[1] == 'K'.code.toByte()
+            ) {
+                return "zip"
+            }
+            return "bin"
+        }
+
+        /**
+         * 카톡에 표시될 파일명이 곧 디스크의 파일명이므로(file:// 의 마지막 경로 조각),
+         * 경로 조작과 파일시스템에서 문제되는 문자를 제거한다. 이름이 비면 타임스탬프로 폴백.
+         */
+        private val UNSAFE_NAME_CHARS = Regex("""[\\/:*?"<>|\x00-\x1F]""")
+
+        private fun safeFileName(raw: String?, idx: Int, data: ByteArray): String {
+            val base = raw.orEmpty().substringAfterLast('/').substringAfterLast('\\').trim()
+            val cleaned = base.replace(UNSAFE_NAME_CHARS, "_").take(120)
+            if (cleaned.isEmpty() || cleaned == "." || cleaned == "..") {
+                return "${System.currentTimeMillis()}_$idx.${detectFileExtension(data)}"
+            }
+            return cleaned
+        }
+
+        /** 같은 이름이 이미 있으면 name_1.ext, name_2.ext … 로 비켜 쓴다. */
+        private fun uniqueFile(dir: File, fileName: String): File {
+            if (!File(dir, fileName).exists()) {
+                return File(dir, fileName)
+            }
+            val stem = fileName.substringBeforeLast('.', fileName)
+            val ext = fileName.substringAfterLast('.', "")
+            for (i in 1 until 1000) {
+                val next = if (ext.isEmpty()) "${stem}_$i" else "${stem}_$i.$ext"
+                val candidate = File(dir, next)
+                if (!candidate.exists()) {
+                    return candidate
+                }
+            }
+            return File(dir, "${System.currentTimeMillis()}_$fileName")
+        }
+
+        private fun sendMultipleFilesInternal(
+            room: Long,
+            base64FileDataStrings: List<String>,
+            fileNames: List<String>?
+        ) {
+            if (base64FileDataStrings.isEmpty()) {
+                System.err.println("No file data given, cannot send files.")
+                return
+            }
+
+            val fileDir = File(IMAGE_DIR_PATH).apply {
+                if (!exists()) {
+                    mkdirs()
+                }
+            }
+
+            var firstMime: String? = null
+            var mixed = false
+
+            val uris = base64FileDataStrings.mapIndexed { idx, base64Str ->
+                val decoded = Base64.decode(base64Str, Base64.DEFAULT)
+                val name = safeFileName(fileNames?.getOrNull(idx), idx, decoded)
+                val mime = mimeForFile(name)
+                if (firstMime == null) firstMime = mime
+                else if (firstMime != mime) mixed = true
+
+                // 이미지/영상과 달리 mediaScan 을 하지 않는다. 카톡은 file:// 을 직접 읽고,
+                // 문서·zip 은 MediaStore 에 색인될 것도 아니다. (am start 로 스캔 없이
+                // 전송되는 걸 실측 확인함.)
+                val target = uniqueFile(fileDir, name).apply { writeBytes(decoded) }
+                Uri.fromFile(target)
+            }
+
+            // 형식이 섞이면 카톡이 가장 관대하게 받는 */* 로 폴백한다.
+            val intentType = if (mixed) "*/*" else (firstMime ?: "application/octet-stream")
+
+            val intent = if (uris.size == 1) {
+                Intent(Intent.ACTION_SEND).apply {
+                    type = intentType
+                    putExtra(Intent.EXTRA_STREAM, uris.first())
+                }
+            } else {
+                Intent(Intent.ACTION_SEND_MULTIPLE).apply {
+                    type = intentType
+                    putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
+                }
+            }.apply {
+                setPackage("com.kakao.talk")
+                putExtra("key_id", room)
+                putExtra("key_type", 1)
+                putExtra("key_from_direct_share", true)
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            }
+
+            try {
+                AndroidHiddenApi.startActivity(intent)
+            } catch (e: Exception) {
+                System.err.println("Error starting activity for sending files: $e")
                 throw e
             }
         }

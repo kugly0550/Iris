@@ -22,6 +22,7 @@ import io.ktor.websocket.send
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.jsonObject
@@ -195,6 +196,17 @@ class IrisServer(
                         ReplyType.VIDEO_MULTIPLE -> Replier.sendMultipleVideos(
                             roomId,
                             replyRequest.data.jsonArray.map { it.jsonPrimitive.content })
+
+                        ReplyType.FILE -> Replier.sendFile(
+                            roomId,
+                            replyRequest.data.jsonPrimitive.content,
+                            replyRequest.name?.jsonPrimitive?.contentOrNull
+                        )
+
+                        ReplyType.FILE_MULTIPLE -> Replier.sendMultipleFiles(
+                            roomId,
+                            replyRequest.data.jsonArray.map { it.jsonPrimitive.content },
+                            replyRequest.name?.jsonArray?.map { it.jsonPrimitive.content })
                     }
 
                     call.respond(ApiResponse(success = true, message = "success"))
