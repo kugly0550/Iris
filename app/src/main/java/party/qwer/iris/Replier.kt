@@ -286,18 +286,16 @@ class Replier {
         }
 
 
-        /**
-         * 파일 전송 인텐트의 MIME. 확장자별로 정확한 MIME 을 넣지 않고 항상 이걸 쓴다.
-         *
-         * 카톡은 MIME 이 아니라 **파일명**으로 타입을 정한다 — 같은 PDF 를
-         * application/pdf 로 보내든 application/octet-stream 으로 보내든 방에 찍히는
-         * 결과(name, CDN 의 .pdf 확장자)가 동일한 걸 실측으로 확인했다.
-         *
-         * 반대로 text/* 는 **쓰면 안 된다**. 카톡 다이렉트 셰어가 text/plain·text/csv 를
-         * 텍스트 공유 흐름으로 보내버려서 EXTRA_STREAM 을 무시하고 조용히 아무것도 안
-         * 보낸다(에러도 없음). .txt 를 octet-stream 으로 보내면 정상 전송된다.
-         * 그래서 확장자→MIME 표는 이득이 없고 함정만 있다.
-         */
+        // 파일 전송 인텐트의 MIME. 확장자별로 정확한 MIME 을 넣지 않고 항상 이걸 쓴다.
+        //
+        // 카톡은 MIME 이 아니라 파일명으로 타입을 정한다 — 같은 PDF 를 application/pdf 로
+        // 보내든 application/octet-stream 으로 보내든 방에 찍히는 결과(name, CDN 의 .pdf
+        // 확장자)가 동일한 걸 실측으로 확인했다.
+        //
+        // 반대로 text 계열(text/plain, text/csv …)은 쓰면 안 된다. 카톡 다이렉트 셰어가
+        // 그걸 텍스트 공유 흐름으로 보내버려서 EXTRA_STREAM 을 무시하고 조용히 아무것도
+        // 안 보낸다(에러도 로그도 없음). 같은 .txt 도 octet-stream 으로는 정상 전송된다.
+        // 그래서 확장자→MIME 표는 이득이 없고 함정만 있다.
         private const val FILE_INTENT_MIME = "application/octet-stream"
 
         /** 이름이 없을 때만 쓰는 최소한의 매직 바이트 추정. 모르면 bin. */
