@@ -287,45 +287,18 @@ class Replier {
 
 
         /**
-         * 확장자 → MIME 표.
+         * 파일 전송 인텐트의 MIME. 확장자별로 정확한 MIME 을 넣지 않고 항상 이걸 쓴다.
          *
-         * android.webkit.MimeTypeMap 을 쓰지 않는 이유: Iris 는 앱이 아니라 루트 데몬
-         * 프로세스로 뜨기 때문에 webkit 초기화가 보장되지 않는다. 카톡으로 오갈 만한
-         * 것만 직접 표로 둔다. 표에 없으면 application/octet-stream.
+         * 카톡은 MIME 이 아니라 **파일명**으로 타입을 정한다 — 같은 PDF 를
+         * application/pdf 로 보내든 application/octet-stream 으로 보내든 방에 찍히는
+         * 결과(name, CDN 의 .pdf 확장자)가 동일한 걸 실측으로 확인했다.
+         *
+         * 반대로 text/* 는 **쓰면 안 된다**. 카톡 다이렉트 셰어가 text/plain·text/csv 를
+         * 텍스트 공유 흐름으로 보내버려서 EXTRA_STREAM 을 무시하고 조용히 아무것도 안
+         * 보낸다(에러도 없음). .txt 를 octet-stream 으로 보내면 정상 전송된다.
+         * 그래서 확장자→MIME 표는 이득이 없고 함정만 있다.
          */
-        private val EXTENSION_MIME: Map<String, String> = mapOf(
-            "pdf" to "application/pdf",
-            "zip" to "application/zip",
-            "7z" to "application/x-7z-compressed",
-            "tar" to "application/x-tar",
-            "gz" to "application/gzip",
-            "txt" to "text/plain",
-            "log" to "text/plain",
-            "md" to "text/markdown",
-            "csv" to "text/csv",
-            "json" to "application/json",
-            "xml" to "text/xml",
-            "html" to "text/html",
-            "py" to "text/x-python",
-            "doc" to "application/msword",
-            "docx" to "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            "xls" to "application/vnd.ms-excel",
-            "xlsx" to "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "ppt" to "application/vnd.ms-powerpoint",
-            "pptx" to "application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            "hwp" to "application/x-hwp",
-            "hwpx" to "application/haansofthwpx",
-            "apk" to "application/vnd.android.package-archive",
-            "epub" to "application/epub+zip",
-            "mp3" to "audio/mpeg",
-            "wav" to "audio/wav",
-            "m4a" to "audio/mp4",
-        )
-
-        private fun mimeForFile(fileName: String): String {
-            val ext = fileName.substringAfterLast('.', "").lowercase()
-            return EXTENSION_MIME[ext] ?: "application/octet-stream"
-        }
+        private const val FILE_INTENT_MIME = "application/octet-stream"
 
         /** 이름이 없을 때만 쓰는 최소한의 매직 바이트 추정. 모르면 bin. */
         private fun detectFileExtension(data: ByteArray): String {
@@ -392,15 +365,9 @@ class Replier {
                 }
             }
 
-            var firstMime: String? = null
-            var mixed = false
-
             val uris = base64FileDataStrings.mapIndexed { idx, base64Str ->
                 val decoded = Base64.decode(base64Str, Base64.DEFAULT)
                 val name = safeFileName(fileNames?.getOrNull(idx), idx, decoded)
-                val mime = mimeForFile(name)
-                if (firstMime == null) firstMime = mime
-                else if (firstMime != mime) mixed = true
 
                 // 이미지/영상과 달리 mediaScan 을 하지 않는다. 카톡은 file:// 을 직접 읽고,
                 // 문서·zip 은 MediaStore 에 색인될 것도 아니다. (am start 로 스캔 없이
@@ -409,17 +376,14 @@ class Replier {
                 Uri.fromFile(target)
             }
 
-            // 형식이 섞이면 카톡이 가장 관대하게 받는 */* 로 폴백한다.
-            val intentType = if (mixed) "*/*" else (firstMime ?: "application/octet-stream")
-
             val intent = if (uris.size == 1) {
                 Intent(Intent.ACTION_SEND).apply {
-                    type = intentType
+                    type = FILE_INTENT_MIME
                     putExtra(Intent.EXTRA_STREAM, uris.first())
                 }
             } else {
                 Intent(Intent.ACTION_SEND_MULTIPLE).apply {
-                    type = intentType
+                    type = FILE_INTENT_MIME
                     putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
                 }
             }.apply {
