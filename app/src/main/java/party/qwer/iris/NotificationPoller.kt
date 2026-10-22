@@ -112,6 +112,19 @@ class NotificationPoller {
                 0
             }
 
+            // 듀얼앱(복제 프로필) 카톡을 맡은 인스턴스(KAKAOTALK_APP_UID=97 등)는 그 사용자 알림만 본다.
+            // 아래 첫 경로는 기본 사용자(0) 알림만 돌려주고, 비어 있지 않으면 거기서 끝나서
+            // 듀얼앱 알림이 한 번도 안 잡혔다.
+            val targetUser = System.getenv("KAKAOTALK_APP_UID")?.toIntOrNull()
+            if (targetUser != null) {
+                val getAppActiveMethod = methods.find {
+                    it.name == "getAppActiveNotifications" && it.parameterTypes.size == 2 && it.parameterTypes[0] == String::class.java
+                }
+                if (getAppActiveMethod != null) {
+                    return extractNotifications(getAppActiveMethod.invoke(inpm, "com.kakao.talk", targetUser))
+                }
+            }
+
             try {
                 val getActiveMethod = methods.find {
                     it.name == "getActiveNotifications" && it.parameterTypes.size == 1 && it.parameterTypes[0] == String::class.java
