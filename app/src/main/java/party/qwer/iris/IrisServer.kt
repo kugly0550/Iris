@@ -50,7 +50,9 @@ class IrisServer(
     val sharedFlow = wsBroadcastFlow.asSharedFlow()
 
     fun startServer() {
-        embeddedServer(Netty, port = Configurable.botSocketPort) {
+        // IRIS_HOST=127.0.0.1 이면 폰 안에서만 받는다(인증 없는 HTTP 라 개인 계정용 인스턴스는 이렇게 띄운다).
+        // 비우면 지금처럼 모든 인터페이스 — 봇 인스턴스 동작은 그대로.
+        embeddedServer(Netty, port = Configurable.botSocketPort, host = System.getenv("IRIS_HOST") ?: "0.0.0.0") {
             install(WebSockets) {
                 contentConverter = KotlinxWebsocketSerializationConverter(Json)
             }

@@ -16,6 +16,12 @@ class AndroidHiddenApi {
             System.getenv("IRIS_RUNNER") ?: "com.android.shell"
         }
 
+        // 인텐트를 보낼 안드로이드 사용자. 기본 -3(USER_CURRENT_OR_SELF)은 늘 기본 사용자(0)의
+        // 카톡으로 간다. 듀얼앱 카톡(예: user 97)을 맡는 인스턴스는 IRIS_TARGET_USER=97 로 띄운다.
+        private val targetUserId: Int by lazy {
+            System.getenv("IRIS_TARGET_USER")?.toIntOrNull() ?: -3
+        }
+
         private fun getStartServiceMethod(): (Intent) -> Unit {
             val IActivityManagerStub = Class.forName("android.app.IActivityManager\$Stub")
             val IActivityManager = Class.forName("android.app.IActivityManager")
@@ -43,7 +49,7 @@ class AndroidHiddenApi {
 
                 return { intent ->
                     method.invoke(
-                        activityManager, null, intent, null, false, callingPackageName, null, -3
+                        activityManager, null, intent, null, false, callingPackageName, null, targetUserId
                     )
                 }
             } catch (_: Exception) {
@@ -64,7 +70,7 @@ class AndroidHiddenApi {
 
                 return { intent ->
                     method.invoke(
-                        activityManager, null, intent, null, false, callingPackageName, -3
+                        activityManager, null, intent, null, false, callingPackageName, targetUserId
                     )
                 }
             } catch (_: Exception) {
@@ -134,7 +140,7 @@ class AndroidHiddenApi {
                         0,
                         null,
                         null,
-                        -3
+                        targetUserId
                     )
                 }
             } catch (_: Exception) {
@@ -172,7 +178,7 @@ class AndroidHiddenApi {
                         0,
                         null,
                         null,
-                        -3
+                        targetUserId
                     )
                 }
             } catch (_: Exception) {
@@ -244,7 +250,7 @@ class AndroidHiddenApi {
                         null,
                         false,
                         false,
-                        -3
+                        targetUserId
                     )
                 }
             } catch (_: Exception) {
