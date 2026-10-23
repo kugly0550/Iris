@@ -155,6 +155,13 @@ class Replier {
             }
         }
 
+        // LG 듀얼앱: 카톡이 기본 사용자(0)와 듀얼앱 사용자(97) 둘 다에 깔리면, LG 프레임워크가 카톡으로 가는
+        // 공유 인텐트를 "어느 카톡?" 선택창으로 바꿔치기한다(패키지만 주면 ResolverActivity, 컴포넌트를 명시해도
+        // ChooserActivity). 화면 꺼진 폰에선 거기서 멈춰서, 2026-10-22 듀얼앱을 만든 뒤로 이미지·영상·파일이
+        // 하나도 안 나갔다. 이 엑스트라는 선택창이 고른 뒤 다시 띄울 때 쓰는 표시로 보이는데(services.jar 문자열),
+        // 붙이면 그 사용자 카톡으로 바로 간다 — user 0·97 둘 다 실측. LG 가 아닌 기기에선 모르는 엑스트라라 무시된다.
+        private const val LG_DUAL_FROM_ANDROID_UI = "com.lge.dual.fromAndroidUi"
+
         private fun sendPhotoInternal(room: Long, base64ImageDataString: String) {
             sendMultiplePhotosInternal(room, listOf(base64ImageDataString))
         }
@@ -186,6 +193,7 @@ class Replier {
 
             val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
                 setPackage("com.kakao.talk")
+                putExtra(LG_DUAL_FROM_ANDROID_UI, true)
                 type = "image/*"
                 putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
                 putExtra("key_id", room)
@@ -269,6 +277,7 @@ class Replier {
 
             val intent = Intent(Intent.ACTION_SEND_MULTIPLE).apply {
                 setPackage("com.kakao.talk")
+                putExtra(LG_DUAL_FROM_ANDROID_UI, true)
                 type = intentType
                 putParcelableArrayListExtra(Intent.EXTRA_STREAM, ArrayList(uris))
                 putExtra("key_id", room)
@@ -386,6 +395,7 @@ class Replier {
                 }
             }.apply {
                 setPackage("com.kakao.talk")
+                putExtra(LG_DUAL_FROM_ANDROID_UI, true)
                 putExtra("key_id", room)
                 putExtra("key_type", 1)
                 putExtra("key_from_direct_share", true)
