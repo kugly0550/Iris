@@ -17,6 +17,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import party.qwer.iris.Replier.Companion.SendMessageRequest
 import java.io.File
+import java.util.concurrent.TimeUnit
 
 // SendMsg : ye-seola/go-kdb
 
@@ -162,6 +163,22 @@ class Replier {
         // 붙이면 그 사용자 카톡으로 바로 간다 — user 0·97 둘 다 실측. LG 가 아닌 기기에선 모르는 엑스트라라 무시된다.
         private const val LG_DUAL_FROM_ANDROID_UI = "com.lge.dual.fromAndroidUi"
 
+        // 카톡 26.9.0(2026-10-22 자동 업데이트)부터는 화면이 꺼져 있으면 공유받은 사진·영상·파일을 안 보낸다.
+        // 공유가 새 메인 화면(AdaptiveMainActivity)을 거치는데 화면이 꺼져 있으면 그 화면이 곧바로 멈추고,
+        // 채팅방은 붙어 온 공유를 1분쯤 안에 처리 못 하면 버린다(26.8.x 까지는 꺼진 화면에서도 갔다).
+        // 그래서 미디어를 넘기기 직전에 화면을 깨운다 — 이미 켜져 있으면 KEYCODE_WAKEUP 은 아무 일도 안 한다.
+        // 화면 잠금이 걸려 있으면 깨워도 안 가므로 봇폰은 잠금 "없음"이어야 한다(10/23 실측: 잠금 화면 상태는
+        // 실패, 잠금 없음은 2초 만에 도착). 깨운 화면은 기기의 화면 꺼짐 시간이 지나면 알아서 꺼진다.
+        private fun wakeScreen() {
+            try {
+                Runtime.getRuntime().exec(arrayOf("/system/bin/input", "keyevent", "KEYCODE_WAKEUP"))
+                    .waitFor(3, TimeUnit.SECONDS)
+                Thread.sleep(500)
+            } catch (e: Exception) {
+                System.err.println("Failed to wake screen before sending media: $e")
+            }
+        }
+
         private fun sendPhotoInternal(room: Long, base64ImageDataString: String) {
             sendMultiplePhotosInternal(room, listOf(base64ImageDataString))
         }
@@ -203,6 +220,7 @@ class Replier {
             }
 
             try {
+                wakeScreen()
                 AndroidHiddenApi.startActivity(intent)
             } catch (e: Exception) {
                 System.err.println("Error starting activity for sending multiple photos: $e")
@@ -287,6 +305,7 @@ class Replier {
             }
 
             try {
+                wakeScreen()
                 AndroidHiddenApi.startActivity(intent)
             } catch (e: Exception) {
                 System.err.println("Error starting activity for sending videos: $e")
@@ -403,6 +422,7 @@ class Replier {
             }
 
             try {
+                wakeScreen()
                 AndroidHiddenApi.startActivity(intent)
             } catch (e: Exception) {
                 System.err.println("Error starting activity for sending files: $e")
